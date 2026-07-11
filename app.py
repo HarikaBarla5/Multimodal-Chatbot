@@ -30,7 +30,7 @@ st.markdown("""
     --studio-bg: #1B1620;
     --studio-surface: #241E2B;
     --studio-surface-2: #2D2536;
-    --studio-text: #F1EDE7;
+    --studio-text: #EDE6F0;
     --studio-text-dim: #A79EB0;
     --studio-amber: #E8A33D;
     --studio-violet: #8C7AE6;
