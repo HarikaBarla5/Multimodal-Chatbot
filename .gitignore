@@ -1,0 +1,11 @@
+# Never commit secrets or local config with a hardcoded key
+.env
+.streamlit/secrets.toml
+
+# Local generated files (not needed in the repo)
+generated_images/
+long_term_memory.json
+
+# Python cache
+__pycache__/
+*.pyc
