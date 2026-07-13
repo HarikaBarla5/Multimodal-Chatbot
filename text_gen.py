@@ -19,9 +19,12 @@ from video_gen import generate_video as _generate_video_impl
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Tracks files generated during the current turn, so main.py can show them.
-# Reset at the start of every get_response() call.
-_last_generated_files = []
+# Tracks files generated during the current turn, so the interface layer
+# (app.py / main.py) can display them. Reset at the start of every
+# get_response() call. Images and videos are tracked separately since
+# they're displayed differently in the UI.
+_last_generated_images = []
+_last_generated_videos = []
 
 
 def generate_image(prompt: str) -> str:
@@ -35,7 +38,7 @@ def generate_image(prompt: str) -> str:
     """
     result = _generate_image_impl(prompt)
     if not result.startswith("["):
-        _last_generated_files.append(result)
+        _last_generated_images.append(result)
     return result
 
 
@@ -46,10 +49,13 @@ def generate_video(prompt: str) -> str:
         prompt: A detailed description of the video to generate.
 
     Returns:
-        A status message (video generation is not wired up to a real
-        provider yet — see video_gen.py).
+        The local file path where the generated video was saved, or an
+        error message if video generation isn't configured/available.
     """
-    return _generate_video_impl(prompt)
+    result = _generate_video_impl(prompt)
+    if not result.startswith("["):
+        _last_generated_videos.append(result)
+    return result
 
 
 def create_chat(system_prompt: str):
@@ -67,14 +73,19 @@ def create_chat(system_prompt: str):
     )
 
 
-def get_response(chat, user_message: str):
+def get_response(chat, content):
     """
     Sends one message to an existing chat session and returns
-    (reply_text, list_of_generated_file_paths).
+    (reply_text, list_of_generated_image_paths, list_of_generated_video_paths).
+
+    `content` can be a plain string (text-only message) or a list mixing
+    text with a file Part (see file_handler.build_message_content) —
+    Gemini's SDK accepts both.
     """
-    global _last_generated_files
-    _last_generated_files = []
+    global _last_generated_images, _last_generated_videos
+    _last_generated_images = []
+    _last_generated_videos = []
 
-    response = chat.send_message(user_message)
+    response = chat.send_message(content)
 
-    return response.text, list(_last_generated_files)
+    return response.text, list(_last_generated_images), list(_last_generated_videos)

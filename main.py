@@ -94,11 +94,13 @@ def main():
                     chat = create_chat(build_system_prompt(long_term))
                 continue
 
-        reply, files = get_response(chat, user_input)
+        reply, images, videos = get_response(chat, user_input)
 
         print(f"\nBot: {reply}")
-        for f in files:
-            print(f"  [generated file: {f}]")
+        for f in images:
+            print(f"  [generated image: {f}]")
+        for f in videos:
+            print(f"  [generated video: {f}]")
 
 
 if __name__ == "__main__":

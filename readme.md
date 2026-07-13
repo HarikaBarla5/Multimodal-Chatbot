@@ -236,3 +236,134 @@ back up on the next visit — this is normal for free hosting.
 - **Restrict access**: Streamlit Cloud supports viewer authentication if
   you don't want the app to be fully public — check Settings → Sharing
   in your app's dashboard.
+
+  # Multimodal Chatbot (Gemini + Pollinations.ai + deAPI.ai)
+
+A web chatbot with a Streamlit interface, generating text, images, and
+video — built entirely on free tiers (Gemini and Pollinations need no
+signup at all; deAPI needs a free account with a $5 signup credit, no
+credit card).
+
+## How generation works
+
+- **Text** — Gemini (`gemini-3.5-flash`), via automatic function calling:
+  Gemini itself decides when to call the image/video tools based on the
+  conversation.
+- **Images** — Pollinations.ai. Completely free, no API key needed.
+- **Video** — deAPI.ai. True free text-to-video doesn't reliably exist
+  anywhere yet, so this works as a two-step pipeline: generate a starting
+  image with Pollinations (free), then animate it into a short clip with
+  deAPI's image-to-video model (free signup credit, no credit card).
+
+## Project structure
+
+```
+chatbot/
+├── app.py                        # Streamlit WEB APP (deploy this)
+├── main.py                        # CLI version (for local testing)
+├── text_gen.py                     # Gemini API + automatic function calling
+├── image_gen.py                     # Pollinations.ai image generation (free, no key)
+├── video_gen.py                      # deAPI.ai image-to-video generation (free signup)
+├── memory.py                          # Long-term JSON persistence
+├── config.py                           # API key handling (env var or Streamlit secrets)
+├── requirements.txt
+├── .gitignore                           # keeps secrets & generated files out of git
+└── .streamlit/secrets.toml.example       # template for local Streamlit secrets
+```
+
+---
+
+## Part 1 — Get your API keys
+
+**Gemini (required, free, no signup friction):**
+Go to **aistudio.google.com/apikey**, sign in with any Google account, create a key.
+
+**deAPI (required for video, free account):**
+Go to **app.deapi.ai/register**, sign up (no credit card), then find your
+key at Dashboard → Settings → API Keys. It looks like `dpn-sk-...`.
+
+---
+
+## Part 2 — Run it locally as a web app
+
+1. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+2. Set up your keys for local Streamlit testing:
+   - Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+   - Paste in both real keys
+   - (This file is git-ignored — it never gets pushed to GitHub)
+
+3. Run the app:
+   ```
+   streamlit run app.py
+   ```
+
+4. Test it: say hi, ask for an image, then ask for a video. **The first
+   time you try video, watch your terminal output closely** — if it
+   errors, uncomment the debug print line in `video_gen.py`
+   (`# print("DEAPI RESPONSE:", result)`) to see deAPI's actual response
+   shape, since that integration was built from docs without a live test
+   account and may need a small adjustment.
+
+---
+
+## Part 3 — Deploy for free on Streamlit Community Cloud
+
+### Push to GitHub
+```
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/multimodal-chatbot.git
+git push -u origin main
+```
+Because of `.gitignore`, your real keys in `.streamlit/secrets.toml`
+never get pushed — only the placeholder `.example` file does.
+
+### Deploy
+1. Go to **share.streamlit.io**, sign in with GitHub
+2. "Create app" → your repo, branch `main`, main file `app.py`
+3. Advanced settings → Secrets → paste both keys:
+   ```
+   GEMINI_API_KEY = "AIza-your-real-key-here"
+   DEAPI_API_KEY = "dpn-sk-your-real-key-here"
+   ```
+4. Deploy
+
+You'll get a public URL like `https://your-app-name.streamlit.app`.
+
+### Updating later
+```
+git add .
+git commit -m "describe your change"
+git push
+```
+Streamlit Cloud auto-redeploys within a minute or two.
+
+---
+
+## Free tier limits to know about
+
+- **Gemini:** ~1,500 requests/day on `gemini-3.5-flash`, no billing.
+- **Pollinations.ai:** no published hard limit, may rate-limit heavy use.
+- **deAPI:** $5 free credit on signup; each video clip costs a few cents,
+  so that's roughly 100+ free video generations before it asks for
+  payment. Check your balance at app.deapi.ai/dashboard.
+- **Streamlit Cloud:** free apps sleep after inactivity, waking in a few
+  seconds on the next visit — normal, not a bug.
+
+## Next steps
+
+- **Upgrade video quality**: deAPI supports several models (see
+  `docs.deapi.ai/models`) — swap `DEAPI_MODEL` in `video_gen.py` to try
+  others.
+- **True text-to-video**: if deAPI adds a confirmed direct text-to-video
+  endpoint, or if you're ready to pay for Google's Veo (via the same
+  Gemini API key, ~$0.08–0.15/second), either can replace the
+  image-first pipeline in `video_gen.py` with a single API call.
+- **Restrict access**: Streamlit Cloud supports viewer authentication if
+  you don't want the app fully public — see Settings → Sharing.
