@@ -78,13 +78,14 @@ def generate_video(prompt: str) -> str:
                 timeout=120,
             )
 
+        print(f"DEAPI STATUS CODE: {response.status_code}")
         response.raise_for_status()
         result = response.json()
 
         # --- DEBUGGING AID ---
-        # Uncomment this line on your first real test to see exactly what
-        # deAPI sends back, then adjust the parsing below to match:
-        # print("DEAPI RESPONSE:", result)
+        # Left on intentionally until video generation is confirmed working.
+        # Shows exactly what deAPI sent back so parsing can be corrected.
+        print("DEAPI RESPONSE:", result)
 
         video_url = _extract_video_url(result)
 
@@ -109,6 +110,11 @@ def generate_video(prompt: str) -> str:
 
         return filepath
 
+    except requests.exceptions.HTTPError as e:
+        return (
+            f"[Video generation failed: HTTP {e.response.status_code} — "
+            f"{e.response.text[:300]}]"
+        )
     except Exception as e:
         return f"[Video generation failed: {e}]"
 

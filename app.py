@@ -13,11 +13,22 @@ Run locally with:  streamlit run app.py
 Deploy for free on: https://share.streamlit.io (Streamlit Community Cloud)
 """
 
+import base64
 import streamlit as st
 from config import validate_config
 from memory import LongTermMemory
 from text_gen import create_chat, get_response
 from file_handler import build_message_content
+import rag
+
+
+def _load_background_base64(path: str) -> str:
+    """Reads a local image and returns it as a base64 string for use in CSS."""
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
+_BG_IMAGE_B64 = _load_background_base64("assets/chat_bot_image.jpg")
 
 st.set_page_config(page_title="Multimodal Chatbot", page_icon="◆", layout="centered")
 
@@ -32,7 +43,7 @@ SUGGESTIONS = [
 # =========================================================================
 # THEME
 # =========================================================================
-st.markdown("""
+_APP_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -51,10 +62,15 @@ st.markdown("""
 
 * { font-family: 'Inter', sans-serif; }
 
-/* Subtle radial glow behind the page for depth, instead of flat black */
+/* Custom background image, dimmed with a dark overlay so chat text/bubbles stay readable */
 .stApp {
-    background:
-        radial-gradient(ellipse 900px 500px at 50% -5%, var(--bg-glow) 0%, var(--bg) 55%);
+    background-image:
+        linear-gradient(rgba(11, 15, 23, 0.82), rgba(11, 15, 23, 0.88)),
+        url("data:image/jpeg;base64,__BG_IMAGE_B64__");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
     color: var(--text);
 }
 #MainMenu, footer, header {visibility: hidden;}
@@ -177,6 +193,10 @@ st.markdown("""
     font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
     color: var(--text-dim); margin: 1.2rem 0 0.5rem 0;
 }
+.mmc-greeting {
+    font-size: 1.05rem; font-weight: 600; color: var(--text);
+    margin-bottom: 0.8rem;
+}
 [data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] p { color: var(--text-dim); }
 [data-testid="stSidebar"] .stTextInput input, [data-testid="stSidebar"] .stSelectbox div {
     background: var(--surface-2); color: var(--text);
@@ -207,8 +227,17 @@ st.markdown("""
 }
 
 /* ---- Chat input, with built-in paperclip attach icon ---- */
+/* Streamlit wraps the input in its own solid-background bottom bar by
+   default — make that transparent so the page background shows through. */
+[data-testid="stBottom"], [data-testid="stBottomBlockContainer"],
+[data-testid="stBottom"] > div, .stChatFloatingInputContainer {
+    background: transparent !important;
+}
 [data-testid="stChatInput"] {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 28px; padding: 4px 8px;
+    background: rgba(28, 37, 49, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border); border-radius: 28px; padding: 4px 8px;
     outline: none !important; box-shadow: 0 4px 20px rgba(0,0,0,0.25) !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -233,7 +262,8 @@ st.markdown("""
 
 hr { border-color: var(--border); }
 </style>
-""", unsafe_allow_html=True)
+"""
+st.markdown(_APP_CSS.replace("__BG_IMAGE_B64__", _BG_IMAGE_B64), unsafe_allow_html=True)
 
 
 def build_system_prompt(long_term_memory: LongTermMemory) -> str:
@@ -293,10 +323,11 @@ def new_conversation():
 
 
 def process_turn(active_conv, user_input: str, uploaded_file=None):
-    """Handles one full exchange: render the user's message, show a live
-    typing indicator while Gemini responds, then render the reply. Shared
-    by both the chat input and the suggestion chips so behavior stays
-    identical no matter how a message was sent."""
+    """Handles one full exchange: retrieve relevant knowledge-base context
+    (if any exists), render the user's message, show a live typing
+    indicator while Gemini responds, then render the reply. Shared by both
+    the chat input and the suggestion chips so behavior stays identical no
+    matter how a message was sent."""
     attachment_name = uploaded_file.name if uploaded_file else None
 
     active_conv["display_history"].append({
@@ -308,14 +339,20 @@ def process_turn(active_conv, user_input: str, uploaded_file=None):
         title_source = user_input or (attachment_name or "New chat")
         active_conv["title"] = title_source[:40] + ("..." if len(title_source) > 40 else "")
 
-    content = build_message_content(user_input, uploaded_file)
-
     typing_placeholder = st.empty()
     typing_placeholder.markdown(
         '<div class="mmc-typing"><div class="mmc-avatar">✦</div>'
         '<div class="mmc-typing-dots"><span></span><span></span><span></span></div></div>',
         unsafe_allow_html=True,
     )
+
+    # Retrieve relevant knowledge-base context, if any documents were added
+    augmented_text = user_input
+    if user_input and rag.has_documents():
+        retrieved_chunks = rag.query(user_input)
+        augmented_text = rag.build_augmented_content(user_input, retrieved_chunks)
+
+    content = build_message_content(augmented_text, uploaded_file)
 
     reply, images, videos = get_response(active_conv["chat"], content)
     typing_placeholder.empty()
@@ -367,6 +404,17 @@ with st.sidebar:
     st.markdown('<div class="mmc-sidebar-label">Memory</div>', unsafe_allow_html=True)
     facts = st.session_state.long_term_memory.facts
 
+    # Pull a name out of stored facts (case-insensitive key match) for a
+    # friendly greeting at the top of the memory panel.
+    stored_name = None
+    for k, v in facts.items():
+        if k.strip().lower() == "name":
+            stored_name = v
+            break
+
+    if stored_name:
+        st.markdown(f'<div class="mmc-greeting">👋 Hi, {stored_name}</div>', unsafe_allow_html=True)
+
     if facts:
         for k, v in facts.items():
             st.markdown(f"**{k}**  \n{v}")
@@ -386,6 +434,37 @@ with st.sidebar:
         if st.button("Forget", use_container_width=True):
             st.session_state.long_term_memory.forget(forget_key)
             st.rerun()
+
+    st.divider()
+    st.markdown('<div class="mmc-sidebar-label">Knowledge Base</div>', unsafe_allow_html=True)
+
+    kb_sources = rag.list_sources()
+    if kb_sources:
+        for src in kb_sources:
+            st.caption(f"📄 {src}")
+    else:
+        st.caption("No documents added yet — upload some to let the chatbot search them automatically.")
+
+    if "kb_uploader_key" not in st.session_state:
+        st.session_state.kb_uploader_key = 0
+
+    kb_files = st.file_uploader(
+        "Add documents",
+        type=["pdf", "txt", "docx"],
+        accept_multiple_files=True,
+        label_visibility="collapsed",
+        key=f"kb_uploader_{st.session_state.kb_uploader_key}",
+    )
+    if kb_files and st.button("Add to knowledge base", use_container_width=True):
+        with st.spinner("Indexing documents..."):
+            for f in kb_files:
+                rag.add_document(f)
+        st.session_state.kb_uploader_key += 1
+        st.rerun()
+
+    if kb_sources and st.button("Clear knowledge base", use_container_width=True):
+        rag.clear()
+        st.rerun()
 
 
 # --- Brand mark ---

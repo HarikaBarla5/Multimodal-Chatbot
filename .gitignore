@@ -6,6 +6,7 @@
 generated_images/
 generated_videos/
 long_term_memory.json
+knowledge_base.json
 
 # Python cache
 __pycache__/

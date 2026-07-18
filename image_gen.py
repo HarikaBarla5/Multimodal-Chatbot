@@ -25,14 +25,11 @@ def generate_image(prompt: str) -> str:
 
     try:
         encoded_prompt = urllib.parse.quote(prompt)
-        url = f"{POLLINATIONS_BASE_URL}{encoded_prompt}"
-
+        url =f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=300&height=300"
         response = requests.get(url, timeout=100)
         response.raise_for_status()
-
         filename = f"image_{int(time.time())}.png"
         filepath = os.path.join(IMAGE_OUTPUT_DIR, filename)
-
         with open(filepath, "wb") as f:
             f.write(response.content)
 
