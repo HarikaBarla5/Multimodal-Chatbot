@@ -62,6 +62,17 @@ _APP_CSS = """
 
 * { font-family: 'Inter', sans-serif; }
 
+/* Catch-all: every button gets a matched background+text pair here FIRST,
+   so nothing can end up with mismatched colors from Streamlit's own
+   defaults. More specific rules further down (sidebar, chips, etc.)
+   override this safely since they come later in the file. */
+.stButton button, [data-testid="stButton"] button, button[kind] {
+    background: var(--surface-2) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+}
+
+
 /* Custom background image, dimmed with a dark overlay so chat text/bubbles stay readable */
 .stApp {
     background-image:
@@ -108,8 +119,13 @@ _APP_CSS = """
     -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
-/* ---- Suggestion chips (empty-state starter prompts) ---- */
-.mmc-chip-row .stButton button {
+/* ---- Suggestion chips (empty-state starter prompts) ----
+   Note: these buttons are NOT actually nested inside .mmc-chip-row in the
+   real DOM (Streamlit renders that div as a sibling, not a parent), so we
+   target them via the main content region + their key-based wrapper class
+   instead, which Streamlit does reliably attach. */
+[data-testid="stMain"] div[class*="st-key-chip_"] button,
+[data-testid="stMain"] .mmc-chip-row + div .stButton button {
     background: var(--surface) !important;
     color: var(--text-dim) !important;
     border: 1px solid var(--border) !important;
@@ -122,7 +138,8 @@ _APP_CSS = """
     white-space: normal !important;
     height: auto !important;
 }
-.mmc-chip-row .stButton button:hover {
+[data-testid="stMain"] div[class*="st-key-chip_"] button:hover,
+[data-testid="stMain"] .mmc-chip-row + div .stButton button:hover {
     border-color: var(--accent) !important;
     color: var(--text) !important;
     background: var(--surface-2) !important;
